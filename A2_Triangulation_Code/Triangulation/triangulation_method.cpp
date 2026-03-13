@@ -33,7 +33,7 @@ using namespace easy3d;
 
 
 /**
- * TODO: (0) Finish this function for reconstructing 3D geometry from corresponding image points.
+ * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
  * @return True on success, otherwise false. On success, the reconstructed 3D points must be written to 'points_3d'
  *      and the recovered relative pose must be written to R and t.
  */
@@ -134,7 +134,7 @@ bool Triangulation::triangulation(
     //--------------------------------------------------------------------------------------------------------------
     // implementation starts ...
 
-    // TODO: (1) check if the input is valid (always good because you never known how others will call your function)
+    // TODO: check if the input is valid (always good because you never known how others will call your function)
     // checking valid input.
     if (points_0.size() < 8 || points_1.size() < 8){
         std::cout << "invalid input. point size smaller than eight." << std::endl;
@@ -148,7 +148,7 @@ bool Triangulation::triangulation(
     std::cout << "\n(1) input checked.\n" << std::endl;
 
 
-    // TODO: (2) Estimate relative pose of two views. This can be subdivided into
+    // TODO: Estimate relative pose of two views. This can be subdivided into
     //      - estimate the fundamental matrix F;
     //      - compute the essential matrix E;
     //      - recover rotation R and t.
@@ -197,10 +197,20 @@ bool Triangulation::triangulation(
 
     std::cout << "d0 -- " << d0 << "\nd1 -- " << d1 << "\n" << std::endl;
 
-    // TODO: (3) Reconstruct 3D points. The main task is
+
+
+    std::cout << "\n(2) text.\n" << std::endl;
+
+
+    // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
 
-    // TODO: (4) Don't forget to
+
+
+    std::cout << "\n(3) text.\n" << std::endl;
+
+
+    // TODO: Don't forget to
     //          - write your recovered 3D points into 'points_3d' (so the viewer can visualize the 3D points for you);
     //          - write the recovered relative pose into R and t (the view will be updated as seen from the 2nd camera,
     //            which can help you check if R and t are correct).
@@ -210,5 +220,8 @@ bool Triangulation::triangulation(
     //          - function not implemented yet;
     //          - input not valid (e.g., not enough points, point numbers don't match);
     //          - encountered failure in any step.
+
+    std::cout << "\n(4) text.\n" << std::endl;
+
     return points_3d.size() > 0;
 }
