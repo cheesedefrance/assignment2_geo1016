@@ -176,7 +176,7 @@ bool Triangulation::triangulation(
 
     std::cout << "centroid points_0 -- " << c0 << "\ncentroid points_1 -- " << c1 << "\n" << std::endl;
 
-    // calculating average distance
+    // calculating average distance for psets 0 and 1
     double dsum0 = 0;
     for (auto& p : points_0) {
         double dx = p[0] - c0[0];
@@ -197,6 +197,58 @@ bool Triangulation::triangulation(
 
     std::cout << "d0 -- " << d0 << "\nd1 -- " << d1 << "\n" << std::endl;
 
+    // calculating scaling factor for psets 0 and 1
+    double s0 = sqrt(2) / d0;
+    double s1 = sqrt(2) / d1;
+
+    // making normalization matrix T for psets 0 and 1
+    Matrix33 T0(s0, 0, - s0 * c0[0],
+        0, s0, - s0 * c0[1],
+        0, 0, 1);
+
+    Matrix33 T1(s1, 0, - s1 * c1[0],
+        0, s1,  - s1 * c1[1],
+        0, 0, 1);
+
+
+    std::cout << "Matrix T0 -- " << T0 << "\nMatrix T1 -- " << T1 << "\n" << std::endl;
+
+    // making psets 0 and 1 into homogeneous coordinates
+    std::vector<Vector3D> np0;
+    np0.resize(points_0.size());
+    for (size_t i = 0; i < points_0.size(); i++) {
+        np0[i] = Vector3D(points_0[i][0], points_0[i][1], 1);
+    }
+
+    std::vector<Vector3D> np1;
+    np1.resize(points_1.size());
+    for (size_t i = 0; i < points_1.size(); i++) {
+        np1[i] = Vector3D(points_1[i][0], points_1[i][1], 1);
+    }
+
+    // applying normalization to psets 0 and 1 by tnp = T * np
+    std::vector<Vector3D> tnp0(np0.size());
+    for (size_t i = 0; i < np0.size(); i++){
+        tnp0[i] = T0 * np0[i];
+    }
+
+    std::vector<Vector3D> tnp1(np1.size());
+    for (size_t i = 0; i < np1.size(); i++){
+        tnp1[i] = T1 * np1[i];
+    }
+
+    // making matrix W
+    int n = tnp0.size();
+    Matrix W(n, 9);
+
+    for (int i = 0; i < n; i++) {
+        double u0  = tnp0[i][0];
+        double v0  = tnp0[i][1];
+        double u1 = tnp1[i][0];
+        double v1 = tnp1[i][1];
+
+        W.set_row(i, {u0*u1, v0*u1, u1, u0*v1, v0*v1, v1, u0, v0, 1});
+    }
 
 
     std::cout << "\n(2) text.\n" << std::endl;
