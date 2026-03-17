@@ -214,50 +214,155 @@ bool Triangulation::triangulation(
     std::cout << "Matrix T0 -- " << T0 << "\nMatrix T1 -- " << T1 << "\n" << std::endl;
 
     // making psets 0 and 1 into homogeneous coordinates
-    std::vector<Vector3D> np0;
-    np0.resize(points_0.size());
+    std::vector<Vector3D> hp0;
+    hp0.resize(points_0.size());
     for (size_t i = 0; i < points_0.size(); i++) {
-        np0[i] = Vector3D(points_0[i][0], points_0[i][1], 1);
+        hp0[i] = Vector3D(points_0[i][0], points_0[i][1], 1);
     }
 
-    std::vector<Vector3D> np1;
-    np1.resize(points_1.size());
+    std::vector<Vector3D> hp1;
+    hp1.resize(points_1.size());
     for (size_t i = 0; i < points_1.size(); i++) {
-        np1[i] = Vector3D(points_1[i][0], points_1[i][1], 1);
+        hp1[i] = Vector3D(points_1[i][0], points_1[i][1], 1);
     }
 
     // applying normalization to psets 0 and 1 by tnp = T * np
-    std::vector<Vector3D> tnp0(np0.size());
-    for (size_t i = 0; i < np0.size(); i++){
-        tnp0[i] = T0 * np0[i];
+    std::vector<Vector3D> np0(hp0.size());
+    for (size_t i = 0; i < hp0.size(); i++){
+        np0[i] = T0 * hp0[i];
     }
 
-    std::vector<Vector3D> tnp1(np1.size());
-    for (size_t i = 0; i < np1.size(); i++){
-        tnp1[i] = T1 * np1[i];
+    std::vector<Vector3D> np1(hp1.size());
+    for (size_t i = 0; i < hp1.size(); i++){
+        np1[i] = T1 * hp1[i];
     }
 
     // making matrix W
-    int n = tnp0.size();
+    int n = np0.size();
     Matrix W(n, 9);
 
     for (int i = 0; i < n; i++) {
-        double u0  = tnp0[i][0];
-        double v0  = tnp0[i][1];
-        double u1 = tnp1[i][0];
-        double v1 = tnp1[i][1];
+        double u0  = np0[i][0];
+        double v0  = np0[i][1];
+        double u1 = np1[i][0];
+        double v1 = np1[i][1];
 
         W.set_row(i, {u0*u1, v0*u1, u1, u0*v1, v0*v1, v1, u0, v0, 1});
     }
 
+    Matrix U(n, n, 0.0);
+    Matrix S(n, 9, 0.0);
+    Matrix V(9, 9, 0.0);
+    svd_decompose(W,U,S,V);
 
-    std::cout << "\n(2) text.\n" << std::endl;
+    // std::cout << "USV check." << std::endl;
+    // // check 1: U is orthogonal, so U * U^T must be identity
+    // std::cout << "U*U^T: \n" << U * transpose(U) << std::endl;
+    // // check 2: V is orthogonal, so V * V^T must be identity
+    // std::cout << "V*V^T: \n" << V * transpose(V) << std::endl;
+    // // check 3: S must be a diagonal matrix
+    // std::cout << "S: \n" << S << std::endl;
+
+    // calculating the fundamental matrix F (slide 46 and notes p.8)
+    Vector fh = V.get_column(V.cols() - 1);
+    Matrix FH(3, 3);
+    FH.set_row(0, {fh[0], fh[1], fh[2]});
+    FH.set_row(1, {fh[3], fh[4], fh[5]});
+    FH.set_row(2, {fh[6], fh[7], fh[8]});
+
+    // enforcing rank(F) = 2
+    Matrix U2(3, 3, 0.0);
+    Matrix S2(3, 3, 0.0);
+    Matrix V2(3, 3, 0.0);
+    svd_decompose(FH,U2,S2,V2);
+
+    S2(2, 2) = 0.0;
+    Matrix33 FQ = U2 * S2 * transpose(V2);
+    Matrix33 F = transpose(T1)*FQ*T0;
+
+    std::cout << U2 << S2 << V2 << std::endl;
+    std::cout << "fundamental matrix FH\n" <<  FH << "\nfundamental matrix FQ\n" << FQ << "\nfundamental matrix F\n" << F  << std::endl;
+
+    // computing essential matrix E
+    Matrix33 K(fx, s, cx, 0, fy, cy, 0, 0, 1);
+    Matrix33 E = transpose(K) * F * K; // denormalized F
+
+    // recovering R, t from SVD(E)
+    Matrix U3(3, 3, 0.0);
+    Matrix S3(3, 3, 0.0);
+    Matrix V3(3, 3, 0.0);
+    svd_decompose(E, U3, S3, V3);
+
+    Matrix33 WE(0, -1, 0, 1, 0, 0, 0, 0, 1);
+    Matrix33 ZE(0, 1, 0, -1, 0, 0, 0, 0, 0);
+
+    std::cout << U3 << S3 << V3 << std::endl;
+
+    Vector t1 = U3.get_column(U3.cols() - 1);
+    Vector t2 = - U3.get_column(U3.cols() - 1);
+
+    Matrix33 R1 = U3 * WE * transpose(V3);
+    Matrix33 R2 = U3 * transpose(WE) * transpose(V3);
+
+    if (determinant(R1) < 0){
+        R1 = - R1;
+    }
+    if (determinant(R2) < 0){
+        R2 = - R2;
+    }
+
+    std::cout << "(2) fundamental matrix F, essential matrix E and R, t computed." << std::endl;
 
 
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
 
+    // four possible combinations for R, t
+    std::vector<Matrix33> Rpos = {R1, R1, R2, R2};
+    std::vector<Vector3D> tpos = {t1, t2, t1, t2};
 
+    int bestcount = -1;
+    int bestindex = 0;
+
+    // for (int c = 0; c < 4; c++){
+    //     Matrix33 R = Rpos[c];
+    //     Vector3D t = tpos[c];
+    //
+    //     // camera #1
+    //     Matrix34 P0(fx, s, cx, 0, 0, fy, cy, 0, 0, 0, 1, 0);
+    //
+    //     // camera #2
+    //     Matrix34 P1(
+    //     fx*(R(0,0)) + cx*R(2,0), fx*(R(0,1)) + cx*R(2,1), fx*(R(0,2)) + cx*R(2,2), fx*t[0] + cx*t[2],
+    //     fy*(R(1,0)) + cy*R(2,0), fy*(R(1,1)) + cy*R(2,1), fy*(R(1,2)) + cy*R(2,2), fy*t[1] + cy*t[2],
+    //     R(2,0), R(2,1), R(2,2), t[2]);
+    //
+    //     int count = 0;
+    //     for (int i = 0; i < n; i++){
+    //         Vector3D P = triangulation(points_0[i], points_1[i], P0, P1);
+    //
+    //         // check in front of camera #1
+    //         bool infront0 = P[2] > 0;
+    //
+    //         // check in front of camera #2
+    //         Vector3D Q = R * P + t;
+    //         bool infront1 = Q[2] > 0;
+    //
+    //         if (infront0 && infront1){
+    //             count++;
+    //         }
+    //
+    //         if (count > bestcount)
+    //         {
+    //             bestcount = count;
+    //             bestindex = c;
+    //         }
+    //     }
+    // }
+    //
+    // // correct R, t
+    // R = Rpos[bestindex];
+    // t = tpos[bestindex];
 
     std::cout << "\n(3) text.\n" << std::endl;
 
