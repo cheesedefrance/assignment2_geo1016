@@ -36,8 +36,7 @@ using namespace easy3d;
  *      and the recovered relative pose must be written to R and t.
  */
 
-Matrix33 get_T_matrix(const std::vector<Vector2D> &points)
-{
+Vector2D get_centroid(const std::vector<Vector2D> &points) {
     Vector2D centroid{0.0,0.0};
     for (int i = 0; i < points.size(); i++) {
         centroid.x() += points[i].x();
@@ -47,11 +46,16 @@ Matrix33 get_T_matrix(const std::vector<Vector2D> &points)
     centroid.x() /= points.size();
     centroid.y() /= points.size();
 
+    return centroid;
+}
+
+
+double get_s(const std::vector<Vector2D> &points, Vector2D cent){
     double mean_distance = 0.0;
 
     for (int i=0; i< points.size(); i++) {
-        double xdiff = points[i].x() - centroid.x();
-        double ydiff = points[i].y() - centroid.y();
+        double xdiff = points[i].x() - cent.x();
+        double ydiff = points[i].y() - cent.y();
         mean_distance += sqrt(xdiff*xdiff + ydiff*ydiff);
     }
 
@@ -59,8 +63,9 @@ Matrix33 get_T_matrix(const std::vector<Vector2D> &points)
 
     double s = sqrt(2.0)/mean_distance;
 
-    Matrix33 T(s, 0, -s*centroid.x(), 0, s, -s*centroid.y(), 0, 0, 1);
-    return T;
+
+
+    return s;
 
 }
 
@@ -97,64 +102,7 @@ bool Triangulation::triangulation(
                  "\t    - submit ONLY the 'Triangulation/triangulation_method.cpp' file.\n"
                  "\t    - remove ALL unrelated test code, debugging code, and comments.\n"
                  "\t    - ensure that your code compiles and can reproduce your results WITHOUT ANY modification.\n\n" << std::flush;
-
-    /// Below are a few examples showing some useful data structures and APIs.
-
-    /// define a 2D vector/point
-    //Vector2D b(1.1, 2.2);
-
-    /// define a 3D vector/point
-    //Vector3D a(1.1, 2.2, 3.3);
-
-    /// get the Cartesian coordinates of a (a is treated as Homogeneous coordinates)
-    //Vector2D p = a.cartesian();
-
-    /// get the Homogeneous coordinates of p
-    //Vector3D q = p.homogeneous();
-
-    /// define a 3 by 3 matrix (and all elements initialized to 0.0)
-   // Matrix33 A;
-
-    /// define and initialize a 3 by 3 matrix
-    //Matrix33 T(1.1, 2.2, 3.3,
-     //          0, 2.2, 3.3,
-     //          0, 0, 1);
-//
-    /// define and initialize a 3 by 4 matrix
-    //Matrix34 M(1.1, 2.2, 3.3, 0,
-    //           0, 2.2, 3.3, 1,
-    //           0, 0, 1, 1);
-
-    /// set first row by a vector
-    //M.set_row(0, Vector4D(1.1, 2.2, 3.3, 4.4));
-
-    /// set second column by a vector
-    //M.set_column(1, Vector3D(5.5, 5.5, 5.5));
-
-    /// define a 15 by 9 matrix (and all elements initialized to 0.0)
-    //Matrix W(15, 9, 0.0);
-    /// set the first row by a 9-dimensional vector
-    //W.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
-
-    /// get the number of rows.
-    //int num_rows = W.rows();
-
-    /// get the number of columns.
-    //int num_cols = W.cols();
-
-    /// get the the element at row 1 and column 2
-    //double value = W(1, 2);
-
-    /// get the last column of a matrix
-    //Vector last_column = W.get_column(W.cols() - 1);
-
-    /// define a 3 by 3 identity matrix
-    //Matrix33 I = Matrix::identity(3, 3, 1.0);
-
-    /// matrix-vector product
-    //Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
-
-    ///For more functions of Matrix and Vector, please refer to 'matrix.h' and 'vector.h'
+    
 
     // TODO: delete all above example code in your final submission
 
@@ -178,28 +126,117 @@ bool Triangulation::triangulation(
 
     int n = points_0.size();
 
-    Matrix33 T0(get_T_matrix(points_0));
-    Matrix33 T1(get_T_matrix(points_1));
+    //Matrix33 T0(get_T_matrix(points_0));
+    //Matrix33 T1(get_T_matrix(points_1));
 
-    for (int i=0; i<points_0.size(); i++) {
 
+    Vector2D centroid0 = get_centroid(points_0);
+    Vector2D centroid1 = get_centroid(points_1);
+
+    double s0 = get_s(points_0, centroid0);
+    double s1 = get_s(points_1, centroid1);
+
+
+
+    std::cout << s0 << std::endl;
+    std::cout << s1 << std::endl;
+    std::cout << centroid0 << std::endl;
+    std::cout << centroid1 << std::endl;
+
+    std::cout << "got centroids and s" << std::endl;
+    std::vector<Vector3D> normalized0;
+    normalized0.resize(points_0.size());
+    std::vector<Vector3D> normalized1;
+    normalized1.resize(points_1.size());
+
+    Matrix33 T0(s0, 0, -s0*centroid0.x(), 0, s0, -s0*centroid0.y(), 0, 0, 1);
+    Matrix33 T1(s1, 0, -s1*centroid1.x(), 0, s1, -s1*centroid1.y(), 0, 0, 1);
+
+    std::cout << "reserved normalized" << std::endl;
+
+std::cout << T0 << std::endl;
+std::cout << points_0[0].homogeneous() << std::endl;
+
+    std::cout << T0*points_0[0].homogeneous() << std::endl;
+
+
+    for (int i=0; i<n; i++) {
+        normalized0[i] = T0*points_0[i].homogeneous();
+        normalized1[i] = T1*points_1[i].homogeneous();
     }
+
+    std::cout << "ran normalization" << std::endl;
 
     ///std::vector<Vector2D> normpoints0 = T0 points_0;
     Matrix W(n, 9, 0.0);
 
     // i++ in c++ means incrementing for each element
     for (int i = 0; i<n; i++) {
-        double u = points_0[i].x();
-        double uprime = points_0[i].y();
-        double v = points_1[i].x();
-        double vprime = points_1[i].y();
+        double u = normalized0[i].x();
+        double uprime = normalized1[i].x();
+        double v = normalized0[i].y();
+        double vprime = normalized1[i].y();
 
         W.set_row(i, {u*uprime, v*uprime, uprime, u*vprime, v*vprime, vprime, u, v, 1}); // using the equations from slide 25 lecture 3
     }
 
-    //std::cout << W << std::endl;
+    std::cout << W << std::endl;
 
+    Matrix U(n, n, 0.0);
+    Matrix S(n, 9, 0.0);
+    Matrix V(9, 9, 0.0);
+
+    // calling the function to get the V (last column) which contains the smallest eigenvalues
+    // to minimize the error
+    svd_decompose(W,U,S,V);
+
+
+    Vector fhat = V.get_column(V.cols() - 1);
+
+    Matrix Fhat(3,3,fhat.data());
+
+    std::cout << Fhat << std::endl;
+
+    Matrix U2(3, 3, 0.0);
+    Matrix S2(3, 3, 0.0);
+    Matrix V2(3, 3, 0.0);
+
+    svd_decompose(Fhat, U2, S2, V2);
+    std::cout << "u2" << U2 << "s2" << S2 << "v2" << V2 << std::endl;
+    S2(2,2) = 0;
+    std::cout << "new s2" <<S2 << std::endl;
+    Matrix Fq = U2*S2*transpose(V2);
+
+
+    //get fundamental matrix F
+    Matrix33 F = transpose(T1)*Fq*T0;
+    std::cout << "F:" << F << std::endl;
+
+    Matrix33 K(fx, s, cx, 0, fy, cy, 0, 0, 1);
+
+    //get essential matrix E
+    Matrix33 E = transpose(K)*F*K;
+
+    std::cout << "E:" << E << std::endl;
+
+    //get rotation and translation
+    Matrix U3(3, 3, 0.0);
+    Matrix S3(3, 3, 0.0);
+    Matrix V3(3, 3, 0.0);
+
+    svd_decompose(E, U3, S3, V3);
+    std::cout << "U3" << U3 << "s3" << S3 << "v3" << V3 << std::endl;
+
+    Matrix33 W2(0, -1, 0, 1, 0, 0, 0, 0, -1);
+
+    Matrix R1 = U3*W2*transpose(V3);
+    Matrix R2 = U3*transpose(W2)*transpose(V3);
+
+    Vector3D t1= U3.get_column(2);
+    Vector3D t2= -U3.get_column(2);
+
+
+    std::cout<<" R1 "<< R1 << " R2 " << R2 << " t1 " << t1 << " t2 " << t2 << std::endl;
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
 
