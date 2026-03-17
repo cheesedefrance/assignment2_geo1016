@@ -35,6 +35,35 @@ using namespace easy3d;
  * @return True on success, otherwise false. On success, the reconstructed 3D points must be written to 'points_3d'
  *      and the recovered relative pose must be written to R and t.
  */
+
+Matrix33 get_T_matrix(const std::vector<Vector2D> &points)
+{
+    Vector2D centroid{0.0,0.0};
+    for (int i = 0; i < points.size(); i++) {
+        centroid.x() += points[i].x();
+        centroid.y() += points[i].y();
+    }
+
+    centroid.x() /= points.size();
+    centroid.y() /= points.size();
+
+    double mean_distance = 0.0;
+
+    for (int i=0; i< points.size(); i++) {
+        double xdiff = points[i].x() - centroid.x();
+        double ydiff = points[i].y() - centroid.y();
+        mean_distance += sqrt(xdiff*xdiff + ydiff*ydiff);
+    }
+
+    mean_distance /= points.size();
+
+    double s = sqrt(2.0)/mean_distance;
+
+    Matrix33 T(s, 0, -s*centroid.x(), 0, s, -s*centroid.y(), 0, 0, 1);
+    return T;
+
+}
+
 bool Triangulation::triangulation(
         double fx, double fy,     /// input: the focal lengths (same for both cameras)
         double cx, double cy,     /// input: the principal point (same for both cameras)
@@ -72,58 +101,58 @@ bool Triangulation::triangulation(
     /// Below are a few examples showing some useful data structures and APIs.
 
     /// define a 2D vector/point
-    Vector2D b(1.1, 2.2);
+    //Vector2D b(1.1, 2.2);
 
     /// define a 3D vector/point
-    Vector3D a(1.1, 2.2, 3.3);
+    //Vector3D a(1.1, 2.2, 3.3);
 
     /// get the Cartesian coordinates of a (a is treated as Homogeneous coordinates)
-    Vector2D p = a.cartesian();
+    //Vector2D p = a.cartesian();
 
     /// get the Homogeneous coordinates of p
-    Vector3D q = p.homogeneous();
+    //Vector3D q = p.homogeneous();
 
     /// define a 3 by 3 matrix (and all elements initialized to 0.0)
-    Matrix33 A;
+   // Matrix33 A;
 
     /// define and initialize a 3 by 3 matrix
-    Matrix33 T(1.1, 2.2, 3.3,
-               0, 2.2, 3.3,
-               0, 0, 1);
-
+    //Matrix33 T(1.1, 2.2, 3.3,
+     //          0, 2.2, 3.3,
+     //          0, 0, 1);
+//
     /// define and initialize a 3 by 4 matrix
-    Matrix34 M(1.1, 2.2, 3.3, 0,
-               0, 2.2, 3.3, 1,
-               0, 0, 1, 1);
+    //Matrix34 M(1.1, 2.2, 3.3, 0,
+    //           0, 2.2, 3.3, 1,
+    //           0, 0, 1, 1);
 
     /// set first row by a vector
-    M.set_row(0, Vector4D(1.1, 2.2, 3.3, 4.4));
+    //M.set_row(0, Vector4D(1.1, 2.2, 3.3, 4.4));
 
     /// set second column by a vector
-    M.set_column(1, Vector3D(5.5, 5.5, 5.5));
+    //M.set_column(1, Vector3D(5.5, 5.5, 5.5));
 
     /// define a 15 by 9 matrix (and all elements initialized to 0.0)
-    Matrix W(15, 9, 0.0);
+    //Matrix W(15, 9, 0.0);
     /// set the first row by a 9-dimensional vector
-    W.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
+    //W.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
 
     /// get the number of rows.
-    int num_rows = W.rows();
+    //int num_rows = W.rows();
 
     /// get the number of columns.
-    int num_cols = W.cols();
+    //int num_cols = W.cols();
 
     /// get the the element at row 1 and column 2
-    double value = W(1, 2);
+    //double value = W(1, 2);
 
     /// get the last column of a matrix
-    Vector last_column = W.get_column(W.cols() - 1);
+    //Vector last_column = W.get_column(W.cols() - 1);
 
     /// define a 3 by 3 identity matrix
-    Matrix33 I = Matrix::identity(3, 3, 1.0);
+    //Matrix33 I = Matrix::identity(3, 3, 1.0);
 
     /// matrix-vector product
-    Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
+    //Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
 
     ///For more functions of Matrix and Vector, please refer to 'matrix.h' and 'vector.h'
 
@@ -134,10 +163,42 @@ bool Triangulation::triangulation(
 
     // TODO: check if the input is valid (always good because you never known how others will call your function).
 
+    if (points_0.size() != points_1.size()) {
+        std::cout << "invalid input, inputs have different size" << std::endl;
+        return false;
+    } else if (points_0.size() <8 || points_1.size() < 8) {
+        std::cout << "invalid input, less than eight inputs" << std::endl;
+        return false;
+    }
+
     // TODO: Estimate relative pose of two views. This can be subdivided into
     //      - estimate the fundamental matrix F;
     //      - compute the essential matrix E;
     //      - recover rotation R and t.
+
+    int n = points_0.size();
+
+    Matrix33 T0(get_T_matrix(points_0));
+    Matrix33 T1(get_T_matrix(points_1));
+
+    for (int i=0; i<points_0.size(); i++) {
+
+    }
+
+    ///std::vector<Vector2D> normpoints0 = T0 points_0;
+    Matrix W(n, 9, 0.0);
+
+    // i++ in c++ means incrementing for each element
+    for (int i = 0; i<n; i++) {
+        double u = points_0[i].x();
+        double uprime = points_0[i].y();
+        double v = points_1[i].x();
+        double vprime = points_1[i].y();
+
+        W.set_row(i, {u*uprime, v*uprime, uprime, u*vprime, v*vprime, vprime, u, v, 1}); // using the equations from slide 25 lecture 3
+    }
+
+    //std::cout << W << std::endl;
 
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
