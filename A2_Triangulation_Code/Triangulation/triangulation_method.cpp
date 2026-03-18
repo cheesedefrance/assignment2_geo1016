@@ -72,58 +72,58 @@ bool Triangulation::triangulation(
     /// Below are a few examples showing some useful data structures and APIs.
 
     /// define a 2D vector/point
-    Vector2D b(1.1, 2.2);
+   // Vector2D b(1.1, 2.2);
 
     /// define a 3D vector/point
-    Vector3D a(1.1, 2.2, 3.3);
+   // Vector3D a(1.1, 2.2, 3.3);
 
     /// get the Cartesian coordinates of a (a is treated as Homogeneous coordinates)
-    Vector2D p = a.cartesian();
+   // Vector2D p = a.cartesian();
 
     /// get the Homogeneous coordinates of p
-    Vector3D q = p.homogeneous();
+   // Vector3D q = p.homogeneous();
 
     /// define a 3 by 3 matrix (and all elements initialized to 0.0)
-    Matrix33 A;
+   // Matrix33 A;
 
     /// define and initialize a 3 by 3 matrix
-    Matrix33 T(1.1, 2.2, 3.3,
-               0, 2.2, 3.3,
-               0, 0, 1);
+   // Matrix33 T(1.1, 2.2, 3.3,
+               //0, 2.2, 3.3,
+               //0, 0, 1);
 
     /// define and initialize a 3 by 4 matrix
-    Matrix34 M(1.1, 2.2, 3.3, 0,
-               0, 2.2, 3.3, 1,
-               0, 0, 1, 1);
+    //Matrix34 M(1.1, 2.2, 3.3, 0,
+              // 0, 2.2, 3.3, 1,
+              // 0, 0, 1, 1);
 
     /// set first row by a vector
-    M.set_row(0, Vector4D(1.1, 2.2, 3.3, 4.4));
+   // M.set_row(0, Vector4D(1.1, 2.2, 3.3, 4.4));
 
     /// set second column by a vector
-    M.set_column(1, Vector3D(5.5, 5.5, 5.5));
+   // M.set_column(1, Vector3D(5.5, 5.5, 5.5));
 
     /// define a 15 by 9 matrix (and all elements initialized to 0.0)
-    Matrix W(15, 9, 0.0);
+   // Matrix W(15, 9, 0.0);
     /// set the first row by a 9-dimensional vector
-    W.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
+//W.set_row(0, {0, 1, 2, 3, 4, 5, 6, 7, 8}); // {....} is equivalent to a std::vector<double>
 
     /// get the number of rows.
-    int num_rows = W.rows();
+    //int num_rows = W.rows();
 
     /// get the number of columns.
-    int num_cols = W.cols();
+   // int num_cols = W.cols();
 
     /// get the the element at row 1 and column 2
-    double value = W(1, 2);
+    //double value = W(1, 2);
 
     /// get the last column of a matrix
-    Vector last_column = W.get_column(W.cols() - 1);
+   // Vector last_column = W.get_column(W.cols() - 1);
 
     /// define a 3 by 3 identity matrix
-    Matrix33 I = Matrix::identity(3, 3, 1.0);
+    //Matrix33 I = Matrix::identity(3, 3, 1.0);
 
     /// matrix-vector product
-    Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
+   // Vector3D v = M * Vector4D(1, 2, 3, 4); // M is 3 by 4
 
     ///For more functions of Matrix and Vector, please refer to 'matrix.h' and 'vector.h'
 
@@ -134,10 +134,179 @@ bool Triangulation::triangulation(
 
     // TODO: check if the input is valid (always good because you never known how others will call your function).
 
+    if (points_0.size() < 8 || points_1.size() < 8 || points_0.size() != points_1.size()) {
+        std::cout << "input is invalid" << std::endl;
+        return false;
+    }
+
     // TODO: Estimate relative pose of two views. This can be subdivided into
     //      - estimate the fundamental matrix F;
     //      - compute the essential matrix E;
-    //      - recover rotation R and t.
+
+    //Making a copy of the points because it's a const
+    std::vector<Vector2D> point_0 = points_0;
+    std::vector<Vector2D> point_1 = points_1;
+
+    // Before building matrix W we need to normalize our points:
+
+    ////////////////////////////////////////// Normalizing Camera 1 ///////////////////////////////////////////////////
+    double sum_u = 0.0, sum_v = 0.0;
+    int n = point_0.size();
+
+    // Getting the average centroid for u and v:
+    for (int i = 0; i < n; i++) {
+        sum_u = sum_u + point_0[i].x();
+        sum_v = sum_v + point_0[i].y();
+    }
+
+    double mean_u = sum_u/n;
+    double mean_v = sum_v/n;
+
+    //To translate - we subtract the centroid from every point
+
+    for (int i = 0; i < n; i++) {
+        point_0[i].x() = point_0[i].x() - mean_u;
+        point_0[i].y() = point_0[i].y() - mean_v;
+    }
+
+    //Calculating the average distance of points and scaling it to sqrt2 around the origin
+
+    double sum_distances = 0;
+
+    for (int i = 0; i < n; i++) {
+        double u = point_0[i].x();
+        double v = point_0[i].y();
+
+        double distance = sqrt(u*u + v*v); //pythagorean distance from origin to point i
+        sum_distances = sum_distances + distance;
+    }
+
+    double average_distance = sum_distances/n;
+    //eg: if the current pixel is at 200, scale = sqrt2/200 = 0.00707 so we multiply every point by 0.00707 = sqrt2
+    double scale = sqrt(2.0)/average_distance;
+
+    //Scaling every point:
+
+    for (int i = 0; i < n; i++) {
+        point_0[i].x() = point_0[i].x() * scale;
+        point_0[i].y() = point_0[i].y() * scale;
+    }
+
+    /////////////////////////////////////////// Normalizing Camera 2 /////////////////////////////////////////////////
+
+    double sum_u1 = 0.0, sum_v1 = 0.0;
+    int n1 = point_1.size();
+
+    // Getting the average centroid for u and v:
+
+    for (int i = 0; i < n1; i++) {
+        sum_u1 = sum_u1 + point_1[i].x();
+        sum_v1 = sum_v1 + point_1[i].y();
+    }
+
+    double mean_u1 = sum_u1/n1;
+    double mean_v1 = sum_v1/n1;
+
+    //To translate - we subtract the centroid from every point
+
+    for (int i = 0; i<n1; i++) {
+        point_1[i].x() = point_1[i].x() - mean_u1;
+        point_1[i].y() = point_1[i].y() - mean_v1;
+    }
+
+    //Calculating the average distance of points and scaling it to sqrt2 around the origin
+
+    double sum_distance1 = 0.0;
+
+    for (int i = 0; i < n1; i++) {
+        double u = point_1[i].x();
+        double v = point_1[i].y();
+
+        double distance = sqrt(u*u + v*v);
+        sum_distance1 = sum_distance1 + distance;
+    }
+
+    double average_distance1 = sum_distance1/n1;
+    double scale1 = sqrt(2.0)/average_distance1;
+
+    //Scaling every point:
+
+    for (int i = 0; i < n1; i++) {
+        point_1[i].x() = point_1[i].x() * scale1;
+        point_1[i].y() = point_1[i].y() * scale1;
+    }
+
+    //////////////////////////////////////////////////// Matrix W and F_q /////////////////////////////////////////////
+
+    //Initializing matrix W:
+
+    Matrix W(n,9,0.0);
+
+    for (int i = 0; i < n; i++) {
+        double u = point_0[i].x();
+        double v = point_0[i].y();
+        double u1 = point_1[i].x();
+        double v1 = point_1[i].y();
+
+        W.set_row(i,{u*u1,v*u1,u1,u*v1,v*v1,v1,u,v,1});
+    }
+
+    //Setting the SVD:
+    Matrix U(n,n,0.0);
+    Matrix S(n,9,0.0);
+    Matrix V(9,9,0.0);
+
+    svd_decompose(W,U,S,V);
+
+    Vector f = V.get_column(V.cols()-1);
+
+    Matrix33 F_q(f[0],f[1],f[2],
+               f[3],f[4],f[5],
+               f[6],f[7],f[8]
+               );
+
+    //////////////////////////////////////////// Constraint enforcement ///////////////////////////////////////////////
+
+    ///Slide 48 F_q = UDVtranspose, so we do SVD on F_q so find the singular values of F_q so we can fix its rank
+
+    Matrix U_q(3,3,0.0);
+    Matrix D_q(3,3,0.0);
+    Matrix V_q(3,3,0.0);
+
+    svd_decompose(F_q,U_q,D_q,V_q);
+
+    ///Setting d3 (2,2) to 0
+    D_q(2,2) = 0.0;
+
+    ///Recomposing the F_q : F = U_q * D_q * V_q transpose
+    Matrix33 F_q_2 = U_q * D_q * transpose(V_q);
+
+    /////////////////////////////////////////////////// Denormalize ///////////////////////////////////////////////////
+
+    Matrix33 T(scale,0,-scale*mean_u,
+               0, scale, -scale*mean_v,
+               0, 0, 1);
+    Matrix33 T1(scale1,0,-scale1*mean_u1,
+                0, scale1, -scale1*mean_v1,
+                0, 0, 1);
+
+    Matrix33 F = transpose(T1) * F_q_2 * T;
+
+
+    /////////////////////////////////////////////// Getting the E matrix /////////////////////////////////////////////
+
+    ///Building the K matrix:
+    Matrix33 K(fx, s, cx,
+               0, fy, cy,
+               0, 0, 1);
+
+    Matrix E = transpose(K) * F * K;
+
+
+    /////////////////////////////////////////////// Recover R and t //////////////////////////////////////////////////
+
+
+
 
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
@@ -154,3 +323,4 @@ bool Triangulation::triangulation(
     //          - encountered failure in any step.
     return points_3d.size() > 0;
 }
+
