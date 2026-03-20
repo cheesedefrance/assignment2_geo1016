@@ -311,5 +311,26 @@ bool Triangulation::triangulation(
 
     std::cout << "(4) 3D points reconstructed.\n\n" << std::flush;
 
+
+    //checking reprojection error?
+    double reprojection_error = 0.0;
+    for (int i = 0; i < n; i++) {
+        // project into image 1
+        Vector3D p1 = K * points_3d[i];
+        double u1 = p1.x()/p1.z(), v1 = p1.y()/p1.z();
+
+        // project into image 2
+        Vector3D p2 = K * (R * points_3d[i] + t);
+        double u2 = p2.x()/p2.z(), v2 = p2.y()/p2.z();
+
+        double e1 = (u1-points_0[i].x())*(u1-points_0[i].x())
+                  + (v1-points_0[i].y())*(v1-points_0[i].y());
+        double e2 = (u2-points_1[i].x())*(u2-points_1[i].x())
+                  + (v2-points_1[i].y())*(v2-points_1[i].y());
+
+        reprojection_error += sqrt(e1) + sqrt(e2);
+    }
+    reprojection_error /= (2*n);
+    std::cout << "Mean reprojection error: " << reprojection_error << " px" << std::endl;
     return points_3d.size() > 0;
 }
