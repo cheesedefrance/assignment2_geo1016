@@ -49,7 +49,6 @@ Vector2D get_centroid(const std::vector<Vector2D> &points) {
     return centroid;
 }
 
-
 double get_s(const std::vector<Vector2D> &points, Vector2D cent){
     double mean_distance = 0.0;
 
@@ -63,12 +62,20 @@ double get_s(const std::vector<Vector2D> &points, Vector2D cent){
 
     double s = sqrt(2.0)/mean_distance;
 
-
-
     return s;
 
 }
 
+Matrix34 make_M2(const Matrix33& K, const Matrix33& R, const Vector3D& t){
+    Matrix33 KR = K * R;
+    Vector3D Kt = K * t;
+    Matrix34 M2(
+        KR(0,0), KR(0,1), KR(0,2), Kt[0],
+        KR(1,0), KR(1,1), KR(1,2), Kt[1],
+        KR(2,0), KR(2,1), KR(2,2), Kt[2]
+    );
+    return M2;
+}
 bool Triangulation::triangulation(
         double fx, double fy,     /// input: the focal lengths (same for both cameras)
         double cx, double cy,     /// input: the principal point (same for both cameras)
@@ -102,7 +109,7 @@ bool Triangulation::triangulation(
                  "\t    - submit ONLY the 'Triangulation/triangulation_method.cpp' file.\n"
                  "\t    - remove ALL unrelated test code, debugging code, and comments.\n"
                  "\t    - ensure that your code compiles and can reproduce your results WITHOUT ANY modification.\n\n" << std::flush;
-    
+
 
     // TODO: delete all above example code in your final submission
 
@@ -146,6 +153,7 @@ bool Triangulation::triangulation(
     std::cout << "got centroids and s" << std::endl;
     std::vector<Vector3D> normalized0;
     normalized0.resize(points_0.size());
+
     std::vector<Vector3D> normalized1;
     normalized1.resize(points_1.size());
 
@@ -154,24 +162,19 @@ bool Triangulation::triangulation(
 
     std::cout << "reserved normalized" << std::endl;
 
-std::cout << T0 << std::endl;
-std::cout << points_0[0].homogeneous() << std::endl;
-
-    std::cout << T0*points_0[0].homogeneous() << std::endl;
 
 
-    for (int i=0; i<n; i++) {
+    for (int i=0; i<n; i++) { //compute normalized points
         normalized0[i] = T0*points_0[i].homogeneous();
         normalized1[i] = T1*points_1[i].homogeneous();
     }
 
     std::cout << "ran normalization" << std::endl;
 
-    ///std::vector<Vector2D> normpoints0 = T0 points_0;
     Matrix W(n, 9, 0.0);
 
-    // i++ in c++ means incrementing for each element
-    for (int i = 0; i<n; i++) {
+
+    for (int i = 0; i<n; i++) { //compute rows of W using normalized points
         double u = normalized0[i].x();
         double uprime = normalized1[i].x();
         double v = normalized0[i].y();
@@ -186,8 +189,6 @@ std::cout << points_0[0].homogeneous() << std::endl;
     Matrix S(n, 9, 0.0);
     Matrix V(9, 9, 0.0);
 
-    // calling the function to get the V (last column) which contains the smallest eigenvalues
-    // to minimize the error
     svd_decompose(W,U,S,V);
 
 
@@ -229,14 +230,73 @@ std::cout << points_0[0].homogeneous() << std::endl;
 
     Matrix33 W2(0, -1, 0, 1, 0, 0, 0, 0, -1);
 
-    Matrix R1 = U3*W2*transpose(V3);
-    Matrix R2 = U3*transpose(W2)*transpose(V3);
+    Matrix R1 = determinant(U3*W2*transpose(V3))*U3*W2*transpose(V3);
+    Matrix R2 = determinant(U3*transpose(W2)*transpose(V3))*U3*transpose(W2)*transpose(V3);
 
     Vector3D t1= U3.get_column(2);
     Vector3D t2= -U3.get_column(2);
 
-
     std::cout<<" R1 "<< R1 << " R2 " << R2 << " t1 " << t1 << " t2 " << t2 << std::endl;
+
+
+    //start making m matrices and linear triangulation
+    Matrix34 M1_mat, M2_mat;
+    // [K | 0] for camera 1
+    M1_mat.set_column(0, K.get_column(0));
+    M1_mat.set_column(1, K.get_column(1));
+    M1_mat.set_column(2, K.get_column(2));
+    M1_mat.set_column(3, {0,0,0});
+
+    //M2 built using function defined at top of code
+
+    auto triangulate_all = [&](const Matrix34& Ma, const Matrix34& Mb,
+                               std::vector<Vector3D>& pts) {
+        pts.clear();
+        for (int i = 0; i < n; i++) {
+            double x0 = points_0[i].x(), y0 = points_0[i].y();
+            double x1 = points_1[i].x(), y1 = points_1[i].y();
+            Matrix A(4, 4, 0.0);
+            A.set_row(0, x0*Ma.get_row(2) - Ma.get_row(0));
+            A.set_row(1, y0*Ma.get_row(2) - Ma.get_row(1));
+            A.set_row(2, x1*Mb.get_row(2) - Mb.get_row(0));
+            A.set_row(3, y1*Mb.get_row(2) - Mb.get_row(1));
+            Matrix U4(4,4,0.0), S4(4,4,0.0), V4(4,4,0.0);
+            svd_decompose(A, U4, S4, V4);
+            Vector col = V4.get_column(3);
+            pts.push_back({col[0]/col[3], col[1]/col[3], col[2]/col[3]});
+        }
+    };
+
+    auto count_front = [&](const std::vector<Vector3D>& pts,
+                            const Matrix33& Rv, const Vector3D& tv) -> int {
+        int count = 0;
+        for (auto& P : pts) {
+            bool front_cam1 = P.z() > 0;
+            Vector3D P2 = Rv * P + tv;
+            bool front_cam2 = P2.z() > 0;
+            if (front_cam1 && front_cam2) count++;
+        }
+        return count;
+    };
+
+    // Test all 4 candidates
+    std::vector<std::pair<Matrix33,Vector3D>> candidates = {
+        {R1,t1},{R1,t2},{R2,t1},{R2,t2}
+    };
+    int best_count = -1;
+    for (auto& [Rc, tc] : candidates) {
+        Matrix34 M2c = make_M2(K, Rc, tc);
+        std::vector<Vector3D> pts;
+        triangulate_all(M1_mat, M2c, pts);
+        int cnt = count_front(pts, Rc, tc);
+        if (cnt > best_count) {
+            best_count = cnt;
+            R = Rc; t = tc;
+            points_3d = pts;
+        }
+    }
+
+return points_3d.size() > 0;
     // TODO: Reconstruct 3D points. The main task is
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
 
@@ -250,5 +310,6 @@ std::cout << points_0[0].homogeneous() << std::endl;
     //          - function not implemented yet;
     //          - input not valid (e.g., not enough points, point numbers don't match);
     //          - encountered failure in any step.
+    return true;
     return points_3d.size() > 0;
 }
