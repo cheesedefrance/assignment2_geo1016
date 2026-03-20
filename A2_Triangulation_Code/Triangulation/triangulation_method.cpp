@@ -185,22 +185,20 @@ bool Triangulation::triangulation(
 
     std::cout << W << std::endl;
 
-    Matrix U(n, n, 0.0);
-    Matrix S(n, 9, 0.0);
-    Matrix V(9, 9, 0.0);
+    Matrix U(n, n, 0.0), S(n, 9, 0.0), V(9, 9, 0.0);
 
     svd_decompose(W,U,S,V);
 
 
     Vector fhat = V.get_column(V.cols() - 1);
 
-    Matrix Fhat(3,3,fhat.data());
+    Matrix Fhat(3,3,fhat.data()); //constructed F hat, which may have full rank
+
+
 
     std::cout << Fhat << std::endl;
 
-    Matrix U2(3, 3, 0.0);
-    Matrix S2(3, 3, 0.0);
-    Matrix V2(3, 3, 0.0);
+    Matrix U2(3, 3, 0.0), S2(3, 3, 0.0), V2(3, 3, 0.0);
 
     svd_decompose(Fhat, U2, S2, V2);
     std::cout << "u2" << U2 << "s2" << S2 << "v2" << V2 << std::endl;
@@ -221,10 +219,7 @@ bool Triangulation::triangulation(
     std::cout << "E:" << E << std::endl;
 
     //get rotation and translation
-    Matrix U3(3, 3, 0.0);
-    Matrix S3(3, 3, 0.0);
-    Matrix V3(3, 3, 0.0);
-
+    Matrix U3(3, 3, 0.0), S3(3, 3, 0.0), V3(3, 3, 0.0);
     svd_decompose(E, U3, S3, V3);
     std::cout << "U3" << U3 << "s3" << S3 << "v3" << V3 << std::endl;
 
@@ -249,7 +244,7 @@ bool Triangulation::triangulation(
 
     //M2 built using function defined at top of code
 
-    auto triangulate_all = [&](const Matrix34& Ma, const Matrix34& Mb,
+    auto triangulate_all = [&](const Matrix34& Ma, const Matrix34& Mb, //triangulates all points using matrices M1 and M2, returns points to pts variable
                                std::vector<Vector3D>& pts) {
         pts.clear();
         for (int i = 0; i < n; i++) {
