@@ -33,10 +33,10 @@ using namespace easy3d;
 
 // helper function to triangulate single point pair given two camera projections
 Vector3D triangulate_points(
-        const Vector2D& p0, // observed point in image 1
-        const Vector2D& p1, // observed point in image 2
-        const Matrix34& P0, // camera matrix 1 (K[I|0])
-        const Matrix34& P1) // camera matrix 2 (K[R|t])
+        const Vector2D& p0, // observed points in image 1
+        const Vector2D& p1, // observed points in image 2
+        const Matrix34& M0, // camera matrix 1 (K[I|0])
+        const Matrix34& M1) // camera matrix 2 (K[R|t])
 {
     double x0 = p0[0], y0 = p0[1];
     double x1 = p1[0], y1 = p1[1];
@@ -44,31 +44,11 @@ Vector3D triangulate_points(
     // building matrix A (each view contributes two rows)
     Matrix A(4, 4);
 
-    // view #1 rows;
-    // x*(m3^T) - m1^T
-    // y*(m3^T) - m2^T
-    A.set_row(0, { x0*P0(2,0) - P0(0,0),
-                   x0*P0(2,1) - P0(0,1),
-                   x0*P0(2,2) - P0(0,2),
-                   x0*P0(2,3) - P0(0,3) });
 
-    A.set_row(1, { y0*P0(2,0) - P0(1,0),
-                   y0*P0(2,1) - P0(1,1),
-                   y0*P0(2,2) - P0(1,2),
-                   y0*P0(2,3) - P0(1,3) });
-
-    // view #2 rows;
-    // x'*(m3'^T) - m1'^T
-    // y'*(m3'^T) - m2'^T
-    A.set_row(2, { x1*P1(2,0) - P1(0,0),
-                   x1*P1(2,1) - P1(0,1),
-                   x1*P1(2,2) - P1(0,2),
-                   x1*P1(2,3) - P1(0,3) });
-
-    A.set_row(3, { y1*P1(2,0) - P1(1,0),
-                   y1*P1(2,1) - P1(1,1),
-                   y1*P1(2,2) - P1(1,2),
-                   y1*P1(2,3) - P1(1,3) });
+    A.set_row(0, x0*M0.get_row(2) - M0.get_row(0));
+    A.set_row(1, y0*M0.get_row(2) - M0.get_row(1));
+    A.set_row(2, x1*M1.get_row(2) - M1.get_row(0));
+    A.set_row(3, y1*M1.get_row(2) - M1.get_row(1));
 
     // solving for AP = 0 via SVD with P is last column of V
     Matrix U4(4, 4, 0.0), S4(4, 4, 0.0), V4(4, 4, 0.0);
@@ -81,6 +61,37 @@ Vector3D triangulate_points(
                     hp3[1] / hp3[3],
                     hp3[2] / hp3[3]);
 }
+//helper function to calculate centroid
+Vector2D get_centroid(const std::vector<Vector2D> &points) {
+    Vector2D centroid{0.0,0.0};
+    for (int i = 0; i < points.size(); i++) {
+        centroid.x() += points[i].x();
+        centroid.y() += points[i].y();
+    }
+
+    centroid.x() /= points.size();
+    centroid.y() /= points.size();
+
+    return centroid;
+}
+//helper function to calculate scale factor s
+double get_s(const std::vector<Vector2D> &points, Vector2D cent){
+    double mean_distance = 0.0;
+
+    for (int i=0; i< points.size(); i++) {
+        double xdiff = points[i].x() - cent.x();
+        double ydiff = points[i].y() - cent.y();
+        mean_distance += sqrt(xdiff*xdiff + ydiff*ydiff);
+    }
+
+    mean_distance /= points.size();
+
+    double s = sqrt(2.0)/mean_distance;
+
+    return s;
+
+}
+
 
 /**
  * TODO: Finish this function for reconstructing 3D geometry from corresponding image points.
@@ -117,53 +128,17 @@ bool Triangulation::triangulation(
     //      - compute the essential matrix E;
     //      - recover rotation R and t.
 
+
+    int n = points_0.size(); //variable used in for loops
     // calculating centroid for point sets 0 and 1
-    double mx0 = 0, my0 = 0;
-    for (auto& p: points_0) {
-        mx0 += p[0];
-        my0 += p[1];
-
-        // std::cout << mx << my << std::endl;
-    }
-
-    Vector2D c0(mx0 / points_0.size(), my0 / points_0.size());
-
-    double mx1 = 0, my1 = 0;
-    for (auto& p: points_1) {
-        mx1 += p[0];
-        my1 += p[1];
-
-        // std::cout << mx << my << std::endl;
-    }
-
-    Vector2D c1(mx1 / points_1.size(), my1 / points_1.size());
+    Vector2D c0 = get_centroid(points_0);
+    Vector2D c1 = get_centroid(points_1);
 
     std::cout << "centroid points_0 -- " << c0 << "\ncentroid points_1 -- " << c1 << "\n" << std::endl;
 
-    // calculating average distance for psets 0 and 1
-    double dsum0 = 0;
-    for (auto& p : points_0) {
-        double dx = p[0] - c0[0];
-        double dy = p[1] - c0[1];
-        dsum0 += std::sqrt(pow(dx, 2) + pow(dy, 2));
-    }
-
-    double d0 = dsum0 / points_0.size();
-
-    double dsum1 = 0;
-    for (auto& p : points_1) {
-        double dx = p[0] - c1[0];
-        double dy = p[1] - c1[1];
-        dsum1 += std::sqrt(pow(dx, 2) + pow(dy, 2));
-    }
-
-    double d1 = dsum1 / points_1.size();
-
-    std::cout << "d0 -- " << d0 << "\nd1 -- " << d1 << "\n" << std::endl;
-
     // calculating scaling factor for psets 0 and 1
-    double s0 = sqrt(2) / d0;
-    double s1 = sqrt(2) / d1;
+    double s0 = get_s(points_0, c0);
+    double s1 = get_s(points_1, c1);
 
     // making normalization matrix T for psets 0 and 1
     Matrix33 T0(s0, 0, - s0 * c0[0],
@@ -177,84 +152,59 @@ bool Triangulation::triangulation(
 
     std::cout << "Matrix T0 -- " << T0 << "\nMatrix T1 -- " << T1 << "\n" << std::endl;
 
-    // making psets 0 and 1 into homogeneous coordinates
-    std::vector<Vector3D> hp0;
-    hp0.resize(points_0.size());
-    for (size_t i = 0; i < points_0.size(); i++) {
-        hp0[i] = Vector3D(points_0[i][0], points_0[i][1], 1);
-    }
-
-    std::vector<Vector3D> hp1;
-    hp1.resize(points_1.size());
-    for (size_t i = 0; i < points_1.size(); i++) {
-        hp1[i] = Vector3D(points_1[i][0], points_1[i][1], 1);
-    }
 
     // applying normalization to psets 0 and 1 by tnp = T * np
-    std::vector<Vector3D> np0(hp0.size());
-    for (size_t i = 0; i < hp0.size(); i++){
-        np0[i] = T0 * hp0[i];
-    }
+    std::vector<Vector3D> np0(points_0.size());
+    std::vector<Vector3D> np1(points_1.size());
 
-    std::vector<Vector3D> np1(hp1.size());
-    for (size_t i = 0; i < hp1.size(); i++){
-        np1[i] = T1 * hp1[i];
-    }
 
-    // making matrix W
-    int n = np0.size();
+    for (int i=0; i<n; i++) { //compute normalized points
+        np0[i] = T0*points_0[i].homogeneous();
+        np1[i] = T1*points_1[i].homogeneous();
+    }
+    // initializing matrix W
     Matrix W(n, 9);
 
     for (int i = 0; i < n; i++) {
-        double u0  = np0[i][0];
-        double v0  = np0[i][1];
-        double u1 = np1[i][0];
-        double v1 = np1[i][1];
+        double u0  = np0[i].x();
+        double v0  = np0[i].y();
+        double u1 = np1[i].x();
+        double v1 = np1[i].y();
 
-        W.set_row(i, {u0*u1, v0*u1, u1, u0*v1, v0*v1, v1, u0, v0, 1});
+        W.set_row(i, {u0*u1, v0*u1, u1, u0*v1, v0*v1, v1, u0, v0, 1}); //populate matrix W
     }
 
-    Matrix U(n, n, 0.0);
-    Matrix S(n, 9, 0.0);
-    Matrix V(9, 9, 0.0);
+    Matrix U(n, n, 0.0), S(n, 9, 0.0), V(9, 9, 0.0);
     svd_decompose(W,U,S,V);
 
-    // calculating the fundamental matrix F (slide 46 and notes p.8)
+    // calculating the fundamental matrix F (slide 46 and notes p.8). this one is still normalized, thus fh or f hat name
     Vector fh = V.get_column(V.cols() - 1);
-    Matrix FH(3, 3);
-    FH.set_row(0, {fh[0], fh[1], fh[2]});
-    FH.set_row(1, {fh[3], fh[4], fh[5]});
-    FH.set_row(2, {fh[6], fh[7], fh[8]});
+    Matrix FH(3, 3, fh.data());
 
     // enforcing rank(F) = 2
-    Matrix U2(3, 3, 0.0);
-    Matrix S2(3, 3, 0.0);
-    Matrix V2(3, 3, 0.0);
+    Matrix U2(3, 3, 0.0), S2(3, 3, 0.0), V2(3, 3, 0.0);
     svd_decompose(FH,U2,S2,V2);
 
     S2(2, 2) = 0.0;
-    Matrix33 FQ = U2 * S2 * transpose(V2);
-    Matrix33 F = transpose(T1)*FQ*T0;
+    Matrix33 FQ = U2 * S2 * transpose(V2); //reconstruct FQ, fundamental matrix with enforced rank=2 but still normalized
+    Matrix33 F = transpose(T1)*FQ*T0; //recover unnormalized F
 
     std::cout << "fundamental matrix FH\n" <<  FH << "\nfundamental matrix FQ\n" << FQ << "\nfundamental matrix F\n" << F  << std::endl;
 
     // computing essential matrix E
-    Matrix33 K(fx, s, cx, 0, fy, cy, 0, 0, 1);
+    Matrix33 K(fx, s, cx, 0, fy, cy, 0, 0, 1); //construct matrix K from given camera parameters
     Matrix33 E = transpose(K) * F * K; // denormalized F
 
     // recovering R, t from SVD(E)
-    Matrix U3(3, 3, 0.0);
-    Matrix S3(3, 3, 0.0);
-    Matrix V3(3, 3, 0.0);
+    Matrix U3(3, 3, 0.0), S3(3, 3, 0.0), V3(3, 3, 0.0);
     svd_decompose(E, U3, S3, V3);
 
     Matrix33 WE(0, -1, 0, 1, 0, 0, 0, 0, 1);
-    Matrix33 ZE(0, 1, 0, -1, 0, 0, 0, 0, 0);
 
-    Vector t1 = U3.get_column(U3.cols() - 1);
-    Vector t2 = - U3.get_column(U3.cols() - 1);
+    Vector t1 = U3.get_column(2);
+    Vector t2 = - U3.get_column(2);
 
-    Matrix33 R1 = determinant(U3 * WE * transpose(V3)) * U3 * WE * transpose(V3);
+    Matrix33 R1 = determinant(U3 * WE * transpose(V3)) * U3 * WE * transpose(V3); //enforce determinant positive 1
     Matrix33 R2 = determinant(U3 * transpose(WE) * transpose(V3)) * U3 * transpose(WE) * transpose(V3);
 
     std::cout << "t1 -- " << t1 << "\n" << "t2 -- " << t2 << std::endl;
@@ -267,7 +217,7 @@ bool Triangulation::triangulation(
     //      - triangulate a pair of image points (i.e., compute the 3D coordinates for each corresponding point pair)
 
     // P0 camera #1 projection matrix formula K[I|0]
-    Matrix34 P0(fx,  s, cx, 0,
+    Matrix34 M0(fx,  s, cx, 0,
                  0, fy, cy, 0,
                  0,  0,  1, 0);
 
@@ -281,24 +231,28 @@ bool Triangulation::triangulation(
         Matrix33 Rc = Rpos[c];
         Vector3D tc = tpos[c];
 
-        // P1 camera #2 projection matrix formula K[R|t]
-        Matrix34 P1(
-            fx * Rc(0,0) + cx * Rc(2,0), fx * Rc(0,1) + cx * Rc(2,1), fx * Rc(0,2) + cx * Rc(2,2), fx * tc[0] + cx * tc[2],
-            fy * Rc(1,0) + cy * Rc(2,0),  fy * Rc(1,1) + cy * Rc(2,1),  fy * Rc(1,2) + cy * Rc(2,2),  fy * tc[1] + cy * tc[2],
-            Rc(2,0), Rc(2,1), Rc(2,2), tc[2]);
+        // // M1 camera 2 projection matrix, from K[R|t]
+
+        Matrix33 KR = K * Rc;
+        Vector3D Kt = K * tc;
+        Matrix34 M1(
+            KR(0,0), KR(0,1), KR(0,2), Kt[0],
+            KR(1,0), KR(1,1), KR(1,2), Kt[1],
+            KR(2,0), KR(2,1), KR(2,2), Kt[2]
+        );
 
         int count = 0;
         for (int i = 0; i < n; i++) {
-            Vector3D p3 = triangulate_points(points_0[i], points_1[i], P0, P1);
+            Vector3D P = triangulate_points(points_0[i], points_1[i], M0, M1);
 
             // point must have positive depth in camera #1 (Z > 0)
-            bool infront0 = p3[2] > 0;
+            bool infront0 = P.z() > 0;
 
             // transform point into camera 2's frame and depth in camera #2 (Z > 0)
-            Vector3D  transform = Rc * p3 + tc;
-            bool infront1 = transform[2] > 0;
+            Vector3D  transformedP = Rc * P + tc;
+            bool infront1 = transformedP.z() > 0;
 
-            if (infront0 && infront1)
+            if (infront0 && infront1) //if point has z>0 for both camera views, add one to count
                 count++;
         }
 
@@ -309,6 +263,11 @@ bool Triangulation::triangulation(
             bestcount = count;
             bestindex = c;
         }
+    }
+
+    if (bestcount==-1) {
+        std::cout<< "No combination of camera views is correct" <<std::endl;
+        return false;
     }
 
     // pick the best relative pose (R, t)
@@ -333,18 +292,21 @@ bool Triangulation::triangulation(
     //          - input not valid (e.g., not enough points, point numbers don't match);
     //          - encountered failure in any step.
 
-    // winning relative pose P2
-    Matrix34 P2(
-    fx * R(0,0) + cx * R(2,0), fx * R(0,1) + cx * R(2,1), fx*R(0,2) + cx * R(2,2), fx * t[0] + cx * t[2],
-    fy * R(1,0) + cy * R(2,0), fy * R(1,1) + cy * R(2,1), fy * R(1,2) + cy * R(2,2), fy * t[1] + cy * t[2],
-    R(2,0), R(2,1), R(2,2), t[2]);
+    // winning relative pose M_final
+    Matrix33 KR = K * R;
+    Vector3D Kt = K * t;
+    Matrix34 M_final(
+    KR(0,0), KR(0,1), KR(0,2), Kt[0],
+    KR(1,0), KR(1,1), KR(1,2), Kt[1],
+    KR(2,0), KR(2,1), KR(2,2), Kt[2]
+    );
 
     points_3d.clear();
     points_3d.reserve(n);
 
     for (int i = 0; i < n; i++) {
-        Vector3D p3 = triangulate_points(points_0[i], points_1[i], P0, P2);
-        points_3d.push_back(p3);
+        Vector3D P = triangulate_points(points_0[i], points_1[i], M0, M_final);
+        points_3d.push_back(P);
     }
 
     std::cout << "(4) 3D points reconstructed.\n\n" << std::flush;
