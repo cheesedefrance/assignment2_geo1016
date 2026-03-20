@@ -225,8 +225,9 @@ bool Triangulation::triangulation(
 
     Matrix33 W2(0, -1, 0, 1, 0, 0, 0, 0, -1);
 
-    Matrix R1 = determinant(U3*W2*transpose(V3))*U3*W2*transpose(V3);
+    Matrix R1 = determinant(U3*W2*transpose(V3))*U3*W2*transpose(V3); //ensures that determinant of R is positive
     Matrix R2 = determinant(U3*transpose(W2)*transpose(V3))*U3*transpose(W2)*transpose(V3);
+
 
     Vector3D t1= U3.get_column(2);
     Vector3D t2= -U3.get_column(2);
@@ -258,7 +259,7 @@ bool Triangulation::triangulation(
             Matrix U4(4,4,0.0), S4(4,4,0.0), V4(4,4,0.0);
             svd_decompose(A, U4, S4, V4);
             Vector col = V4.get_column(3);
-            pts.push_back({col[0]/col[3], col[1]/col[3], col[2]/col[3]});
+            pts.push_back({col[0]/col[3], col[1]/col[3], col[2]/col[3]}); //append calculated 3D point P to pts variable
         }
     };
 
@@ -266,9 +267,9 @@ bool Triangulation::triangulation(
                             const Matrix33& Rv, const Vector3D& tv) -> int {
         int count = 0;
         for (auto& P : pts) {
-            bool front_cam1 = P.z() > 0;
-            Vector3D P2 = Rv * P + tv;
-            bool front_cam2 = P2.z() > 0;
+            bool front_cam1 = P.z() > 0; //count how many points in front of camera 1
+            Vector3D P2 = Rv * P + tv; //calculate line of sight of camera 2 using rotation and translation
+            bool front_cam2 = P2.z() > 0; //calculate how many points in front of camera 2
             if (front_cam1 && front_cam2) count++;
         }
         return count;
