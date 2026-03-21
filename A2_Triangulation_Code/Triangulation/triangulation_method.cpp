@@ -41,10 +41,8 @@ Vector3D triangulate_points(
     double x0 = p0[0], y0 = p0[1];
     double x1 = p1[0], y1 = p1[1];
 
-    // building matrix A (each view contributes two rows)
+
     Matrix A(4, 4);
-
-
     A.set_row(0, x0*M0.get_row(2) - M0.get_row(0));
     A.set_row(1, y0*M0.get_row(2) - M0.get_row(1));
     A.set_row(2, x1*M1.get_row(2) - M1.get_row(0));
@@ -265,7 +263,7 @@ bool Triangulation::triangulation(
         }
     }
 
-    if (bestcount==-1) {
+    if (bestcount==-1) { //in case no points lie in front of cameras, abort program
         std::cout<< "No combination of camera views is correct" <<std::endl;
         return false;
     }
@@ -301,8 +299,6 @@ bool Triangulation::triangulation(
     KR(2,0), KR(2,1), KR(2,2), Kt[2]
     );
 
-    points_3d.clear();
-    points_3d.reserve(n);
 
     for (int i = 0; i < n; i++) {
         Vector3D P = triangulate_points(points_0[i], points_1[i], M0, M_final);
